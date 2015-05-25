@@ -1,7 +1,7 @@
 #
 #
 #           The Nim Compiler
-#        (c) Copyright 2013 Andreas Rumpf
+#        (c) Copyright 2015 Andreas Rumpf
 #
 #    See the file "copying.txt", included in this
 #    distribution, for details about the copyright.
@@ -83,11 +83,11 @@ type                          # please make sure we have under 32 options
   TGCMode* = enum             # the selected GC
     gcNone, gcBoehm, gcMarkAndSweep, gcRefc, gcV2, gcGenerational
 
-  TIdeCmd* = enum
+  IdeCmd* = enum
     ideNone, ideSug, ideCon, ideDef, ideUse
 
 var
-  gIdeCmd*: TIdeCmd
+  gIdeCmd*: IdeCmd
 
 const
   ChecksOptions* = {optObjCheck, optFieldCheck, optRangeCheck, optNilCheck,
@@ -149,6 +149,7 @@ var
   gProjectName* = "" # holds a name like 'nimrod'
   gProjectPath* = "" # holds a path like /home/alice/projects/nimrod/compiler/
   gProjectFull* = "" # projectPath/projectName
+  gProjectIsStdin* = false # whether we're compiling from stdin
   gProjectMainIdx*: int32 # the canonical path id of the main module
   nimcacheDir* = ""
   command* = "" # the main command (e.g. cc, check, scan, etc)
@@ -395,3 +396,18 @@ template cnimdbg*: expr = p.module.module.fileIdx == gProjectMainIdx
 template pnimdbg*: expr = p.lex.fileIdx == gProjectMainIdx
 template lnimdbg*: expr = L.fileIdx == gProjectMainIdx
 
+proc parseIdeCmd*(s: string): IdeCmd =
+  case s:
+  of "sug": ideSug
+  of "con": ideCon
+  of "def": ideDef
+  of "use": ideUse
+  else: ideNone
+
+proc `$`*(c: IdeCmd): string =
+  case c:
+  of ideSug: "sug"
+  of ideCon: "con"
+  of ideDef: "def"
+  of ideUse: "use"
+  of ideNone: "none"

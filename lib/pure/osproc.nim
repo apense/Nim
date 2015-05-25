@@ -174,7 +174,7 @@ proc terminate*(p: Process) {.rtl, extern: "nosp$1", tags: [].}
 proc kill*(p: Process) {.rtl, extern: "nosp$1", tags: [].}
   ## Kill the process `p`. On Posix OSes the procedure sends ``SIGKILL`` to
   ## the process. On Windows ``kill()`` is simply an alias for ``terminate()``.
-  
+
 proc running*(p: Process): bool {.rtl, extern: "nosp$1", tags: [].}
   ## Returns true iff the process `p` is still running. Returns immediately.
 
@@ -195,43 +195,43 @@ proc peekExitCode*(p: Process): int {.tags: [].}
 proc inputStream*(p: Process): Stream {.rtl, extern: "nosp$1", tags: [].}
   ## returns ``p``'s input stream for writing to.
   ##
-  ## **Warning**: The returned `PStream` should not be closed manually as it
-  ## is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `Stream` should not be closed manually as it
+  ## is closed when closing the Process ``p``.
 
 proc outputStream*(p: Process): Stream {.rtl, extern: "nosp$1", tags: [].}
   ## returns ``p``'s output stream for reading from.
   ##
-  ## **Warning**: The returned `PStream` should not be closed manually as it
-  ## is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `Stream` should not be closed manually as it
+  ## is closed when closing the Process ``p``.
 
 proc errorStream*(p: Process): Stream {.rtl, extern: "nosp$1", tags: [].}
   ## returns ``p``'s error stream for reading from.
   ##
-  ## **Warning**: The returned `PStream` should not be closed manually as it
-  ## is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `Stream` should not be closed manually as it
+  ## is closed when closing the Process ``p``.
 
 proc inputHandle*(p: Process): FileHandle {.rtl, extern: "nosp$1",
   tags: [].} =
   ## returns ``p``'s input file handle for writing to.
   ##
-  ## **Warning**: The returned `TFileHandle` should not be closed manually as
-  ## it is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `FileHandle` should not be closed manually as
+  ## it is closed when closing the Process ``p``.
   result = p.inHandle
 
 proc outputHandle*(p: Process): FileHandle {.rtl, extern: "nosp$1",
   tags: [].} =
   ## returns ``p``'s output file handle for reading from.
   ##
-  ## **Warning**: The returned `TFileHandle` should not be closed manually as
-  ## it is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `FileHandle` should not be closed manually as
+  ## it is closed when closing the Process ``p``.
   result = p.outHandle
 
 proc errorHandle*(p: Process): FileHandle {.rtl, extern: "nosp$1",
   tags: [].} =
   ## returns ``p``'s error file handle for reading from.
   ##
-  ## **Warning**: The returned `TFileHandle` should not be closed manually as
-  ## it is closed when closing the PProcess ``p``.
+  ## **Warning**: The returned `FileHandle` should not be closed manually as
+  ## it is closed when closing the Process ``p``.
   result = p.errHandle
 
 proc countProcessors*(): int {.rtl, extern: "nosp$1".} =
@@ -303,7 +303,7 @@ proc execProcesses*(cmds: openArray[string],
       close(p)
 
 proc select*(readfds: var seq[Process], timeout = 500): int
-  ## `select` with a sensible Nim interface. `timeout` is in miliseconds.
+  ## `select` with a sensible Nim interface. `timeout` is in milliseconds.
   ## Specify -1 for no timeout. Returns the number of processes that are
   ## ready to read from. The processes that are ready to be read from are
   ## removed from `readfds`.
@@ -666,7 +666,7 @@ elif not defined(useNimRtl):
     data.workingDir = workingDir
 
 
-    when declared(posix_spawn) and not defined(useFork) and 
+    when declared(posix_spawn) and not defined(useFork) and
         not defined(useClone) and not defined(linux):
       pid = startProcessAuxSpawn(data)
     else:
@@ -823,7 +823,7 @@ elif not defined(useNimRtl):
         discard execvp(data.sysCommand, data.sysArgs)
       else:
         when defined(uClibc):
-          # uClibc environment (OpenWrt included) doesn't have the full execvpe 
+          # uClibc environment (OpenWrt included) doesn't have the full execvpe
           discard execve(data.sysCommand, data.sysArgs, data.sysEnv)
         else:
           discard execvpe(data.sysCommand, data.sysArgs, data.sysEnv)
@@ -864,9 +864,9 @@ elif not defined(useNimRtl):
       raiseOsError(osLastError())
 
   proc kill(p: Process) =
-    if kill(p.id, SIGKILL) != 0'i32: 
+    if kill(p.id, SIGKILL) != 0'i32:
       raiseOsError(osLastError())
-    
+
   proc waitForExit(p: Process, timeout: int = -1): int =
     #if waitPid(p.id, p.exitCode, 0) == int(p.id):
     # ``waitPid`` fails if the process is not running anymore. But then
@@ -883,7 +883,7 @@ elif not defined(useNimRtl):
     var ret = waitpid(p.id, p.exitCode, WNOHANG)
     var b = ret == int(p.id)
     if b: result = -1
-    if p.exitCode == -3: result = -1
+    if not WIFEXITED(p.exitCode): result = -1
     else: result = p.exitCode.int shr 8
 
   proc createStream(stream: var Stream, handle: var FileHandle,
@@ -907,7 +907,7 @@ elif not defined(useNimRtl):
       createStream(p.errStream, p.errHandle, fmRead)
     return p.errStream
 
-  proc csystem(cmd: cstring): cint {.nodecl, importc: "system", 
+  proc csystem(cmd: cstring): cint {.nodecl, importc: "system",
                                      header: "<stdlib.h>".}
 
   proc execCmd(command: string): int =

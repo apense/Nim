@@ -761,7 +761,7 @@ proc len*(n: JsonNode): int =
   of JObject: result = n.fields.len
   else: discard
 
-proc `[]`*(node: JsonNode, name: string): JsonNode =
+proc `[]`*(node: JsonNode, name: string): JsonNode {.inline.} =
   ## Gets a field from a `JObject`, which must not be nil.
   ## If the value at `name` does not exist, returns nil
   assert(not isNil(node))
@@ -771,7 +771,7 @@ proc `[]`*(node: JsonNode, name: string): JsonNode =
       return item
   return nil
 
-proc `[]`*(node: JsonNode, index: int): JsonNode =
+proc `[]`*(node: JsonNode, index: int): JsonNode {.inline.} =
   ## Gets the node at `index` in an Array. Result is undefined if `index`
   ## is out of bounds
   assert(not isNil(node))
@@ -799,7 +799,7 @@ proc add*(obj: JsonNode, key: string, val: JsonNode) =
   assert obj.kind == JObject
   obj.fields.add((key, val))
 
-proc `[]=`*(obj: JsonNode, key: string, val: JsonNode) =
+proc `[]=`*(obj: JsonNode, key: string, val: JsonNode) {.inline.} =
   ## Sets a field from a `JObject`. Performs a check for duplicate keys.
   assert(obj.kind == JObject)
   for i in 0..obj.fields.len-1:
@@ -808,22 +808,25 @@ proc `[]=`*(obj: JsonNode, key: string, val: JsonNode) =
       return
   obj.fields.add((key, val))
 
-proc `{}`*(node: JsonNode, key: string): JsonNode =
-  ## Transverses the node and gets the given value. If any of the
-  ## names does not exist, returns nil
+proc `{}`*(node: JsonNode, keys: varargs[string]): JsonNode =
+  ## Traverses the node and gets the given value. If any of the
+  ## keys do not exist, returns nil. Also returns nil if one of the
+  ## intermediate data structures is not an object
   result = node
-  if isNil(node): return nil
-  result = result[key]
+  for key in keys:
+    if isNil(result) or result.kind!=JObject:
+      return nil
+    result=result[key]
 
-proc `{}=`*(node: JsonNode, names: varargs[string], value: JsonNode) =
-  ## Transverses the node and tries to set the value at the given location
-  ## to `value` If any of the names are missing, they are added
+proc `{}=`*(node: JsonNode, keys: varargs[string], value: JsonNode) =
+  ## Traverses the node and tries to set the value at the given location
+  ## to `value` If any of the keys are missing, they are added
   var node = node
-  for i in 0..(names.len-2):
-    if isNil(node[names[i]]):
-      node[names[i]] = newJObject()
-    node = node[names[i]]
-  node[names[names.len-1]] = value
+  for i in 0..(keys.len-2):
+    if isNil(node[keys[i]]):
+      node[keys[i]] = newJObject()
+    node = node[keys[i]]
+  node[keys[keys.len-1]] = value
 
 proc delete*(obj: JsonNode, key: string) =
   ## Deletes ``obj[key]`` preserving the order of the other (key, value)-pairs.
@@ -946,10 +949,46 @@ proc pretty*(node: JsonNode, indent = 2): string =
   result = ""
   toPretty(result, node, indent)
 
+proc toUgly*(result: var string, node: JsonNode) =
+  ## Converts `node` to its JSON Representation, without
+  ## regard for human readability. Meant to improve ``$`` string
+  ## conversion performance.
+  ##
+  ## This provides higher efficiency than the ``toPretty`` procedure as it
+  ## does **not** attempt to format the resulting JSON to make it human readable.
+  var comma = false
+  case node.kind:
+  of JArray:
+    result.add "["
+    for child in node.elems:
+      if comma: result.add ","
+      else:     comma = true
+      result.toUgly child
+    result.add "]"
+  of JObject:
+    result.add "{"
+    for key, value in items(node.fields):
+      if comma: result.add ","
+      else:     comma = true
+      result.add key.escapeJson()
+      result.add ":"
+      result.toUgly value
+    result.add "}"
+  of JString:
+    result.add node.str.escapeJson()
+  of JInt:
+    result.add($node.num)
+  of JFloat:
+    result.add($node.fnum)
+  of JBool:
+    result.add(if node.bval: "true" else: "false")
+  of JNull:
+    result.add "null"
+
 proc `$`*(node: JsonNode): string =
   ## Converts `node` to its JSON Representation on one line.
-  result = ""
-  toPretty(result, node, 0, false)
+  result = newStringOfCap(node.len shl 1)
+  toUgly(result, node)
 
 iterator items*(node: JsonNode): JsonNode =
   ## Iterator for the items of `node`. `node` has to be a JArray.
@@ -1150,25 +1189,33 @@ when false:
 when isMainModule:
   #var node = parse("{ \"test\": null }")
   #echo(node.existsKey("test56"))
+
   var parsed = parseFile("tests/testdata/jsontest.json")
   var parsed2 = parseFile("tests/testdata/jsontest2.json")
-  echo(parsed)
-  echo()
-  echo(pretty(parsed, 2))
-  echo()
-  echo(parsed["keyÄÖöoßß"])
-  echo()
-  echo(pretty(parsed2))
-  try:
-    echo(parsed["key2"][12123])
-    raise newException(ValueError, "That line was expected to fail")
-  except IndexError: echo()
+
+  when not defined(testing):
+    echo(parsed)
+    echo()
+    echo(pretty(parsed, 2))
+    echo()
+    echo(parsed["keyÄÖöoßß"])
+    echo()
+    echo(pretty(parsed2))
+    try:
+      echo(parsed["key2"][12123])
+      raise newException(ValueError, "That line was expected to fail")
+    except IndexError: echo()
 
   let testJson = parseJson"""{ "a": [1, 2, 3, 4], "b": "asd" }"""
   # nil passthrough
   assert(testJson{"doesnt_exist"}{"anything"}.isNil)
   testJson{["c", "d"]} = %true
   assert(testJson["c"]["d"].bval)
+
+  # test `$`
+  let stringified = $testJson
+  let parsedAgain = parseJson(stringified)
+  assert(parsedAgain["b"].str == "asd")
 
   # Bounds checking
   try:
@@ -1185,6 +1232,14 @@ when isMainModule:
     assert(testJson["a"][0].num == 1, "Index doesn't correspond to its value")
   except:
     assert(false, "EInvalidIndex thrown for valid index")
+
+  assert(testJson{"b"}.str=="asd", "Couldn't fetch a singly nested key with {}")
+  assert(isNil(testJson{"nonexistent"}), "Non-existent keys should return nil")
+  assert(parsed2{"repository", "description"}.str=="IRC Library for Haskell", "Couldn't fetch via multiply nested key using {}")
+  assert(isNil(testJson{"a", "b"}), "Indexing through a list should return nil")
+  assert(isNil(testJson{"a", "b"}), "Indexing through a list should return nil")
+  assert(testJson{"a"}==parseJson"[1, 2, 3, 4]", "Didn't return a non-JObject when there was one to be found")
+  assert(isNil(parseJson("[1, 2, 3]"){"foo"}), "Indexing directly into a list should return nil")
 
   # Generator:
   var j = %* [{"name": "John", "age": 30}, {"name": "Susan", "age": 31}]
@@ -1217,11 +1272,12 @@ when isMainModule:
     ]
   assert j3 == %[%{"name": %"John", "age": %30}, %{"name": %"Susan", "age": %31}]
 
-  discard """
-  while true:
-    var json = stdin.readLine()
-    var node = parse(json)
-    echo(node)
-    echo()
-    echo()
-  """
+  when not defined(testing):
+    discard """
+    while true:
+      var json = stdin.readLine()
+      var node = parse(json)
+      echo(node)
+      echo()
+      echo()
+    """

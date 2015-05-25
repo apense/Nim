@@ -88,7 +88,9 @@ type
     ntyBigNum,
     ntyConst, ntyMutable, ntyVarargs,
     ntyIter,
-    ntyError
+    ntyError,
+    ntyBuiltinTypeClass, ntyConcept, ntyConceptInst, ntyComposite,
+    ntyAnd, ntyOr, ntyNot
 
   TNimTypeKinds* {.deprecated.} = set[NimTypeKind]
   NimSymKind* = enum
@@ -162,6 +164,7 @@ proc kind*(n: NimNode): NimNodeKind {.magic: "NKind", noSideEffect.}
   ## returns the `kind` of the node `n`.
 
 proc intVal*(n: NimNode): BiggestInt {.magic: "NIntVal", noSideEffect.}
+proc boolVal*(n: NimNode): bool {.compileTime, noSideEffect.} = n.intVal != 0
 proc floatVal*(n: NimNode): BiggestFloat {.magic: "NFloatVal", noSideEffect.}
 proc symbol*(n: NimNode): NimSym {.magic: "NSymbol", noSideEffect.}
 proc ident*(n: NimNode): NimIdent {.magic: "NIdent", noSideEffect.}
@@ -173,6 +176,12 @@ proc getType*(n: NimNode): NimNode {.magic: "NGetType", noSideEffect.}
   ## so there is no danger of infinite recursions during traversal. To
   ## resolve recursive types, you have to call 'getType' again. To see what
   ## kind of type it is, call `typeKind` on getType's result.
+
+proc getType*(n: typedesc): NimNode {.magic: "NGetType", noSideEffect.}
+  ## Returns the Nim type node for given type. This can be used to turn macro
+  ## typedesc parameter into proper NimNode representing type, since typedesc
+  ## are an exception in macro calls - they are not mapped implicitly to
+  ## NimNode like any other arguments.
 
 proc typeKind*(n: NimNode): NimTypeKind {.magic: "NGetType", noSideEffect.}
   ## Returns the type kind of the node 'n' that should represent a type, that
@@ -355,6 +364,12 @@ proc expectLen*(n: NimNode, len: int) {.compileTime.} =
   ## macros that check its number of arguments.
   if n.len != len: error("macro expects a node with " & $len & " children")
 
+proc newTree*(kind: NimNodeKind,
+              children: varargs[NimNode]): NimNode {.compileTime.} =
+  ## produces a new node with children.
+  result = newNimNode(kind)
+  result.add(children)
+
 proc newCall*(theProc: NimNode,
               args: varargs[NimNode]): NimNode {.compileTime.} =
   ## produces a new call node. `theProc` is the proc that is called with
@@ -388,6 +403,11 @@ proc newLit*(i: BiggestInt): NimNode {.compileTime.} =
   ## produces a new integer literal node.
   result = newNimNode(nnkIntLit)
   result.intVal = i
+
+proc newLit*(b: bool): NimNode {.compileTime.} =
+  ## produces a new boolean literal node.
+  result = newNimNode(nnkIntLit)
+  result.intVal = ord(b)
 
 proc newLit*(f: BiggestFloat): NimNode {.compileTime.} =
   ## produces a new float literal node.

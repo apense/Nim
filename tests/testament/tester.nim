@@ -50,7 +50,7 @@ type
 
 let
   pegLineError =
-    peg"{[^(]*} '(' {\d+} ', ' \d+ ') ' ('Error') ':' \s* {.*}"
+    peg"{[^(]*} '(' {\d+} ', ' {\d+} ') ' ('Error') ':' \s* {.*}"
   pegOtherError = peg"'Error:' \s* {.*}"
   pegSuccess = peg"'Hint: operation successful'.*"
   pegOfInterest = pegLineError / pegOtherError
@@ -77,14 +77,35 @@ proc callCompiler(cmdTemplate, filename, options: string,
   result.msg = ""
   result.file = ""
   result.outp = ""
-  result.line = -1
+  result.line = 0
+  result.column = 0
   if err =~ pegLineError:
     result.file = extractFilename(matches[0])
     result.line = parseInt(matches[1])
-    result.msg = matches[2]
+    result.column = parseInt(matches[2])
+    result.msg = matches[3]
   elif err =~ pegOtherError:
     result.msg = matches[0]
   elif suc =~ pegSuccess:
+    result.err = reSuccess
+
+proc callCCompiler(cmdTemplate, filename, options: string,
+                  target: TTarget): TSpec =
+  let c = parseCmdLine(cmdTemplate % ["target", targetToCmd[target],
+                       "options", options, "file", filename.quoteShell])
+  var p = startProcess(command="gcc", args=c[5.. ^1],
+                       options={poStdErrToStdOut, poUsePath})
+  let outp = p.outputStream
+  var x = newStringOfCap(120)
+  result.nimout = ""
+  result.msg = ""
+  result.file = ""
+  result.outp = ""
+  result.line = -1
+  while outp.readLine(x.TaintedString) or running(p):
+    result.nimout.add(x & "\n")
+  close(p)
+  if p.peekExitCode == 0:
     result.err = reSuccess
 
 proc initResults: TResults =
@@ -130,8 +151,11 @@ proc cmpMsgs(r: var TResults, expected, given: TSpec, test: TTest) =
   elif extractFilename(expected.file) != extractFilename(given.file) and
       "internal error:" notin expected.msg:
     r.addResult(test, expected.file, given.file, reFilesDiffer)
-  elif expected.line != given.line and expected.line != 0:
-    r.addResult(test, $expected.line, $given.line, reLinesDiffer)
+  elif expected.line   != given.line   and expected.line   != 0 or
+       expected.column != given.column and expected.column != 0:
+    r.addResult(test, $expected.line & ':' & $expected.column,
+                      $given.line    & ':' & $given.column,
+                      reLinesDiffer)
   else:
     r.addResult(test, expected.msg, given.msg, reSuccess)
     inc(r.passed)
@@ -191,7 +215,12 @@ proc testSpec(r: var TResults, test: TTest) =
   let tname = test.name.addFileExt(".nim")
   inc(r.total)
   styledEcho "Processing ", fgCyan, extractFilename(tname)
-  var expected = parseSpec(tname)
+  var expected: TSpec
+  if test.action != actionRunNoSpec:
+    expected = parseSpec(tname)
+  else:
+    specDefaults expected
+    expected.action = actionRunNoSpec
   if expected.err == reIgnored:
     r.addResult(test, "", "", reIgnored)
     inc(r.skipped)
@@ -201,7 +230,7 @@ proc testSpec(r: var TResults, test: TTest) =
       var given = callCompiler(expected.cmd, test.name,
         test.options & " --hint[Path]:off --hint[Processing]:off", test.target)
       compilerOutputTests(test, given, expected, r)
-    of actionRun:
+    of actionRun, actionRunNoSpec:
       var given = callCompiler(expected.cmd, test.name, test.options,
                                test.target)
       if given.err != reSuccess:
@@ -247,8 +276,22 @@ proc testNoSpec(r: var TResults, test: TTest) =
   r.addResult(test, "", given.msg, given.err)
   if given.err == reSuccess: inc(r.passed)
 
+proc testC(r: var TResults, test: TTest) =
+  # runs C code. Doesn't support any specs, just goes by exit code.
+  let tname = test.name.addFileExt(".c")
+  inc(r.total)
+  styledEcho "Processing ", fgCyan, extractFilename(tname)
+  var given = callCCompiler(cmdTemplate, test.name & ".c", test.options, test.target)
+  if given.err != reSuccess:
+    r.addResult(test, "", given.msg, given.err)
+  elif test.action == actionRun:
+    let exeFile = changeFileExt(test.name, ExeExt)
+    var (buf, exitCode) = execCmdEx(exeFile, options = {poStdErrToStdOut, poUseShell})
+    if exitCode != 0: given.err = reExitCodesDiffer
+  if given.err == reSuccess: inc(r.passed)
+
 proc makeTest(test, options: string, cat: Category, action = actionCompile,
-              target = targetC): TTest =
+              target = targetC, env: string = ""): TTest =
   # start with 'actionCompile', will be overwritten in the spec:
   result = TTest(cat: cat, name: test, options: options,
                  target: target, action: action)

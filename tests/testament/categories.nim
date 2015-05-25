@@ -138,6 +138,18 @@ proc gcTests(r: var TResults, cat: Category, options: string) =
   test "stackrefleak"
   test "cyclecollector"
 
+proc longGCTests(r: var TResults, cat: Category, options: string) =
+  when defined(windows):
+    let cOptions = "gcc -ldl -DWIN"
+  else:
+    let cOptions = "gcc -ldl"
+
+  var c = initResults()
+  # According to ioTests, this should compile the file
+  testNoSpec c, makeTest("tests/realtimeGC/shared", options, cat, actionCompile)
+  testC r, makeTest("tests/realtimeGC/cmain", cOptions, cat, actionRun)
+  testSpec r, makeTest("tests/realtimeGC/nmain", options & "--threads: on", cat, actionRun)
+
 # ------------------------- threading tests -----------------------------------
 
 proc threadTests(r: var TResults, cat: Category, options: string) =
@@ -226,7 +238,7 @@ proc testStdlib(r: var TResults, pattern, options: string, cat: Category) =
   for test in os.walkFiles(pattern):
     let contents = readFile(test).string
     if contents.contains("when isMainModule"):
-      testSpec r, makeTest(test, options, cat, actionRun)
+      testSpec r, makeTest(test, options, cat, actionRunNoSpec)
     else:
       testNoSpec r, makeTest(test, options, cat, actionCompile)
 
@@ -340,6 +352,8 @@ proc processCategory(r: var TResults, cat: Category, options: string) =
     dllTests(r, cat, options)
   of "gc":
     gcTests(r, cat, options)
+  of "longgc":
+    longGCTests(r, cat, options)
   of "debugger":
     debuggerTests(r, cat, options)
   of "manyloc":

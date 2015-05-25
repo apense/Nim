@@ -24,6 +24,17 @@ proc `*`*(x: int, order: SortOrder): int {.inline.} =
   var y = order.ord - 1
   result = (x xor y) - y
 
+proc fill*[T](a: var openArray[T], first, last: Natural, value: T) =
+  ## fills the array ``a[first..last]`` with `value`.
+  var x = first
+  while x <= last:
+    a[x] = value
+    inc(x)
+
+proc fill*[T](a: var openArray[T], value: T) =
+  ## fills the array `a` with `value`.
+  fill(a, 0, a.high, value)
+
 proc reverse*[T](a: var openArray[T], first, last: Natural) =
   ## reverses the array ``a[first..last]``.
   var x = first
@@ -40,8 +51,8 @@ proc reverse*[T](a: var openArray[T]) =
 proc reversed*[T](a: openArray[T], first, last: Natural): seq[T] =
   ## returns the reverse of the array `a[first..last]`.
   result = newSeq[T](last - first + 1)
-  var x = first
-  var y = last
+  var x = first.int
+  var y = last.int
   while x <= last:
     result[x] = a[y]
     dec(y)
@@ -210,8 +221,7 @@ template sortedByIt*(seq1, op: expr): expr =
   ##     p2: Person = (name: "p2", age: 20)
   ##     p3: Person = (name: "p3", age: 30)
   ##     p4: Person = (name: "p4", age: 30)
-  ##
-  ##   people = @[p1,p2,p4,p3]
+  ##     people = @[p1,p2,p4,p3]
   ##
   ##   echo people.sortedByIt(it.name)
   ##
@@ -233,7 +243,7 @@ template sortedByIt*(seq1, op: expr): expr =
 proc product*[T](x: openArray[seq[T]]): seq[seq[T]] =
   ## produces the Cartesian product of the array. Warning: complexity
   ## may explode.
-  result = @[]
+  result = newSeq[seq[T]]()
   if x.len == 0:
     return
   if x.len == 1:
@@ -243,8 +253,7 @@ proc product*[T](x: openArray[seq[T]]): seq[seq[T]] =
     indexes = newSeq[int](x.len)
     initial = newSeq[int](x.len)
     index = 0
-  # replace with newSeq as soon as #853 is fixed
-  var next: seq[T] = @[]
+  var next = newSeq[T]()
   next.setLen(x.len)
   for i in 0..(x.len-1):
     if len(x[i]) == 0: return
