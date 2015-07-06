@@ -3196,14 +3196,19 @@ when declared(initDebugger):
 when hostOS != "standalone":
   # XXX: make these the default (or implement the NilObject optimization)
   proc safeAdd*[T](x: var seq[T], y: T) {.noSideEffect.} =
+    ## Add `y` to `x` unless `x` is not initialized; in that case, `x` becomes
+    ## `@[y]`
     if x == nil: x = @[y]
     else: x.add(y)
 
   proc safeAdd*(x: var string, y: char) =
+    ## Add `y` to `x`, initializing `x` to `""` if it is not yet initialized
     if x == nil: x = ""
     x.add(y)
 
   proc safeAdd*(x: var string, y: string) =
+    ## Add `y` to `x` unless `x` is not initialized; in that case, `x` becomes
+    ## `y`
     if x == nil: x = y
     else: x.add(y)
 
