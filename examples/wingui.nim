@@ -1,7 +1,8 @@
 # test a Windows GUI application
+# requires the 'oldwinapi' package from Nimble
 
 import
-  windows, shellapi, nb30, mmsystem, shfolder
+  windows
 
 #proc MessageBox(hWnd: int, lpText, lpCaption: CString, uType: uint): int
 #  {stdcall, import: "MessageBox", header: "<windows.h>"}
